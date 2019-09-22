@@ -1,0 +1,15 @@
+language: go
+
+go:
+    - master
+
+stages:
+    - test
+    - build
+
+jobs:
+    include:
+        - stage: test
+          script: go test ./... -test.v
+        - stage: build
+          script: go build
