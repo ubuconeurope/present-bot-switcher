@@ -23,7 +23,7 @@ type Conference struct {
 	Title   string `xml:"title"`
 	Start   string `xml:"start"`
 	End     string `xml:"end"`
-	Days    string `xml:"days"`
+	Days    int    `xml:"days"`
 }
 
 // Day contains each Day's schedule (per room)
