@@ -95,17 +95,18 @@ func fixScheduleRoomsID(schedule *Schedule) {
 
 	// iterate over rooms on all days
 	for d, day := range schedule.Days {
+	RoomsLoop:
 		for r, room := range day.Rooms {
 
 			// keep updating the roomsSlice if a new name comes.
 			// also updates the room.ID (starting in 1)
-		RoomsSliceLoop:
 			for i, rSlice := range roomsSlice {
 				if rSlice == room.Name {
 					schedule.Days[d].Rooms[r].ID = i + 1
-					break RoomsSliceLoop
+					continue RoomsLoop // just continue to the next room
 				}
 			}
+
 			// only reaches this line if the room.Name is not stored yet
 			roomsSlice = append(roomsSlice, room.Name)
 			schedule.Days[d].Rooms[r].ID = len(roomsSlice)
