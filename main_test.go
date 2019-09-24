@@ -30,7 +30,6 @@ func TestFixScheduleRoomsID(t *testing.T) {
 		</day>
     <day index='2' date='2019-10-11' start='2019-10-11T04:00:00' end='2019-10-12T03:59:00'>
         <room name='Room4'></room>
-        <room name='Room5'></room>
         <room name='Room6'></room>
 		</day>
 </schedule>
@@ -57,7 +56,7 @@ func TestFixScheduleRoomsID(t *testing.T) {
 	if schedule.Days[0].Rooms[5].ID != 5 {
 		t.Error("The sixth room.ID (day 1) should be 5. Instead got:", schedule.Days[0].Rooms[5].ID)
 	}
-	if schedule.Days[1].Rooms[2].ID != 6 {
-		t.Error("The third room.ID (day 2) should be 6. Instead got:", schedule.Days[1].Rooms[2].ID)
+	if schedule.Days[1].Rooms[1].ID != 6 {
+		t.Error("The second room.ID (day 2) should be 6. Instead got:", schedule.Days[1].Rooms[1].ID)
 	}
 }
