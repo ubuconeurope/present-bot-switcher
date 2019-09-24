@@ -36,6 +36,7 @@ type Day struct {
 
 // Room contains each Room's schedule (each event)
 type Room struct {
+	ID     int
 	Name   string  `xml:"name,attr"`
 	Events []Event `xml:"event"`
 }
@@ -70,7 +71,7 @@ func PrintScheduleInfo(schedule Schedule) {
 	for i, day := range schedule.Days {
 		fmt.Printf("Day %v: %v\n", i+1, day.Start)
 		for _, room := range day.Rooms {
-			fmt.Printf("= Room: %v\n", room.Name)
+			fmt.Printf("= Room %v: %v\n", room.ID, room.Name)
 			for _, event := range room.Events {
 
 				// join multiple people per event
@@ -83,6 +84,32 @@ func PrintScheduleInfo(schedule Schedule) {
 			}
 		}
 		fmt.Println("")
+	}
+}
+
+// This function parses all rooms names and associate an id to them.
+// ID starts at 1 and associates with first seen room name.
+// Then it associates that ID with the room obj inside schedule.Days.
+func fixScheduleRoomsID(schedule *Schedule) {
+	roomsSlice := make([]string, 0, 10)
+
+	// iterate over rooms on all days
+	for d, day := range schedule.Days {
+		for r, room := range day.Rooms {
+
+			// keep updating the roomsSlice if a new name comes.
+			// also updates the room.ID (starting in 1)
+		RoomsSliceLoop:
+			for i, rSlice := range roomsSlice {
+				if rSlice == room.Name {
+					schedule.Days[d].Rooms[r].ID = i + 1
+					break RoomsSliceLoop
+				}
+			}
+			// only reaches this line if the room.Name is not stored yet
+			roomsSlice = append(roomsSlice, room.Name)
+			schedule.Days[d].Rooms[r].ID = len(roomsSlice)
+		}
 	}
 }
 
@@ -106,6 +133,7 @@ func main() {
 		fmt.Printf("error: %v", err)
 		return
 	}
+	fixScheduleRoomsID(&schedule)
 
 	// Print parsed XML info
 	PrintScheduleInfo(schedule)
