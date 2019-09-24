@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"strings"
 
+	"encoding/json"
 	"encoding/xml"
 )
 
@@ -60,6 +61,72 @@ type Event struct {
 type Person struct {
 	ID   int    `xml:"id,attr"`
 	Name string `xml:",innerxml"`
+}
+
+// RoomInfo is the same structure of github.com/ubuconeurope/present-switch:RoomInfo
+type RoomInfo struct {
+	ID             int    `json:"room_id"` // room number
+	RoomName       string `json:"room"`
+	CurrentTitle   string `json:"title"`
+	CurrentSpeaker string `json:"speaker"`
+	CurrentTime    string `json:"time"`
+	NextTitle      string `json:"n_title"`
+	NextSpeaker    string `json:"n_speaker"`
+	NextTime       string `json:"n_time"`
+}
+
+// createRoomInfoJSONBody creates a goroutine and request an update at the event time
+func createRoomInfoJSONBody(room Room, event Event) []byte {
+	var roomInfo RoomInfo
+
+	// join multiple people per event
+	var speakers []string
+	for _, p := range event.Persons {
+		speakers = append(speakers, fmt.Sprintf("%v", p.Name))
+	}
+
+	roomInfo.ID = room.ID
+	roomInfo.RoomName = room.Name
+	roomInfo.CurrentTitle = event.Title
+	roomInfo.CurrentSpeaker = strings.Join(speakers, ", ")
+	roomInfo.CurrentTime = event.Start
+
+	// TODO: fill with next event
+	roomInfo.NextTitle = ""
+	roomInfo.NextSpeaker = ""
+	roomInfo.NextTime = ""
+
+	roomInfoJSON, err := json.Marshal(roomInfo)
+	if err != nil {
+		fmt.Println("Could not marshal roomInfo")
+		panic(err)
+	}
+	return roomInfoJSON
+}
+
+func dispachEventUpdate(room Room, event Event, roomInfoJSON []byte) {
+	// TODO: call goroutine
+}
+
+// ScheduleEventUpdaters will create a goroutine for each event,
+//   and request an update at the event time
+func ScheduleEventUpdaters(schedule Schedule) {
+
+	for i, day := range schedule.Days {
+		fmt.Printf("Processing Day %v: %v\n", i+1, day.Start)
+
+		for _, room := range day.Rooms {
+			fmt.Printf("= Processing Room: %v\n", room.Name)
+
+			for _, event := range room.Events {
+				fmt.Printf("... Processing event %v: %v: %v\n", event.GUID, event.Start, event.Title)
+				roomInfoJSON := createRoomInfoJSONBody(room, event)
+				// this will create the goroutine:
+				dispachEventUpdate(room, event, roomInfoJSON)
+			}
+		}
+		fmt.Println("")
+	}
 }
 
 // PrintScheduleInfo prints unmarshaled XML schedule
@@ -137,5 +204,11 @@ func main() {
 	fixScheduleRoomsID(&schedule)
 
 	// Print parsed XML info
+	fmt.Println("############ Printing Schedule Info ############")
 	PrintScheduleInfo(schedule)
+
+	fmt.Println("############ Scheduling Event Updaters ############")
+	ScheduleEventUpdaters(schedule)
+
+	fmt.Println("############ Updates were scheduled. Just wait for them to finish... (WIP - NOT WORKING YET) ############")
 }
