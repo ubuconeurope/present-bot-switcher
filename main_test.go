@@ -60,3 +60,26 @@ func TestFixScheduleRoomsID(t *testing.T) {
 		t.Error("The second room.ID (day 2) should be 6. Instead got:", schedule.Days[1].Rooms[1].ID)
 	}
 }
+
+func TestCreateRoomInfoJSONBody(t *testing.T) {
+	room := Room{ID: 1, Name: "RoomName"}
+	event := Event{
+		Title: "EventTitle",
+		Start: "10:00",
+		Persons: []Person{
+			Person{
+				Name: "PersonName1",
+			},
+			Person{
+				Name: "PersonName2",
+			},
+		},
+	}
+
+	roomInfoJSON := createRoomInfoJSONBody(room, event)
+	expectedJSON := `{"room_id":1,"room":"RoomName","title":"EventTitle","speaker":"PersonName1, PersonName2","time":"10:00","n_title":"","n_speaker":"","n_time":""}`
+
+	if string(roomInfoJSON) != expectedJSON {
+		t.Errorf("Result was not expected\n\nGot:\n%v\nExpected:\n%v\n..........\n", string(roomInfoJSON), expectedJSON)
+	}
+}
