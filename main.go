@@ -208,14 +208,22 @@ func main() {
 
 	// Fix: maybe not so hardcoded
 	scheduleEventURL := "https://manage.ubucon.org/eu2019/schedule/export/schedule.xml"
+	altLocalScheduleFile := "schedule.xml"
+	var body []byte
 
-	// Get schedule from the official URL
+	// Get schedule from the official URL, or failback to local file
 	resp, err := http.Get(scheduleEventURL)
 	if err != nil {
+		fmt.Println("WARNING: Could not read remote URL. Fallbacking to local file")
+		body, err = ioutil.ReadFile(altLocalScheduleFile)
+		if err != nil {
+			fmt.Println("Error reading file. Does it exist?")
 			panic(err)
 		}
-	body, err := ioutil.ReadAll(resp.Body)
+	} else {
+		body, err = ioutil.ReadAll(resp.Body)
 		resp.Body.Close()
+	}
 
 	// Parse XML
 	schedule := Schedule{}
