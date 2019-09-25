@@ -106,12 +106,12 @@ func createRoomInfoJSONBody(room Room, event Event) []byte {
 
 func dispachEventUpdate(room Room, event Event, roomInfoJSON []byte) {
 	// TODO: call goroutine
+	fmt.Printf("    STUB: room %v - (%v) %v...\n", room.ID, event.Start, string(roomInfoJSON)[:60])
+
 }
 
-// ScheduleEventUpdaters will create a goroutine for each event,
-//   and request an update at the event time
-func ScheduleEventUpdaters(schedule Schedule) {
-
+// function with side effects
+func remapScheduleToEventsPerRoom(roomsMap *map[int]Room, eventsPerRoom *map[int][]Event, schedule Schedule) {
 	for i, day := range schedule.Days {
 		fmt.Printf("Processing Day %v: %v\n", i+1, day.Start)
 
@@ -119,14 +119,37 @@ func ScheduleEventUpdaters(schedule Schedule) {
 			fmt.Printf("= Processing Room: %v\n", room.Name)
 
 			for _, event := range room.Events {
-				fmt.Printf("... Processing event %v: %v: %v\n", event.GUID, event.Start, event.Title)
-				roomInfoJSON := createRoomInfoJSONBody(room, event)
-				// this will create the goroutine:
-				dispachEventUpdate(room, event, roomInfoJSON)
+				(*roomsMap)[room.ID] = room
+				(*eventsPerRoom)[room.ID] = append((*eventsPerRoom)[room.ID], event)
 			}
 		}
+
 		fmt.Println("")
 	}
+}
+
+// ScheduleEventUpdaters will create a goroutine for each event,
+//   and request an update at the event time
+func ScheduleEventUpdaters(schedule Schedule) {
+
+	// map(Room.ID)Room
+	roomsMap := make(map[int]Room)
+	eventsPerRoom := make(map[int][]Event)
+
+	remapScheduleToEventsPerRoom(&roomsMap, &eventsPerRoom, schedule)
+
+	fmt.Println("#################")
+	for roomID, eventsOnRoom := range eventsPerRoom {
+		fmt.Printf("... Processing events for room %v: %v\n", roomID, roomsMap[roomID].Name)
+		for _, event := range eventsOnRoom {
+			fmt.Printf("... ... Processing event %v: %v: %v\n", event.GUID, event.Start, event.Title)
+			roomInfoJSON := createRoomInfoJSONBody(roomsMap[roomID], event)
+			// this will create the goroutine:
+			dispachEventUpdate(roomsMap[roomID], event, roomInfoJSON)
+		}
+	}
+	fmt.Println("#################")
+
 }
 
 // PrintScheduleInfo prints unmarshaled XML schedule
@@ -189,10 +212,10 @@ func main() {
 	// Get schedule from the official URL
 	resp, err := http.Get(scheduleEventURL)
 	if err != nil {
-		panic(err)
-	}
+			panic(err)
+		}
 	body, err := ioutil.ReadAll(resp.Body)
-	resp.Body.Close()
+		resp.Body.Close()
 
 	// Parse XML
 	schedule := Schedule{}
