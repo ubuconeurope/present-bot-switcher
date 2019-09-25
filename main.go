@@ -46,6 +46,7 @@ type Room struct {
 type Event struct {
 	ID          int      `xml:"id,attr"`
 	GUID        string   `xml:"guid,attr"`
+	Date        string   `xml:"date"`
 	Title       string   `xml:"title"`
 	Start       string   `xml:"start"`    // Hour:Minute
 	Duration    string   `xml:"duration"` // Hour:Minute

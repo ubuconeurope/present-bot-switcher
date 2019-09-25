@@ -178,6 +178,9 @@ func TestXMLParser(t *testing.T) {
 	if "https://test.dev/talk/77YFDG" != schedule.Days[0].Rooms[0].Events[0].URL {
 		t.Errorf("Unexpected event URL: %s", schedule.Days[0].Rooms[0].Events[0].URL)
 	}
+	if "2019-10-10T10:00:00+01:00" != schedule.Days[0].Rooms[0].Events[0].Date {
+		t.Errorf("Unexpected date time: %s", schedule.Days[0].Rooms[0].Events[0].Date)
+	}
 	if "10:00" != schedule.Days[0].Rooms[0].Events[0].Start {
 		t.Errorf("Unexpected start time: %s", schedule.Days[0].Rooms[0].Events[0].Start)
 	}
