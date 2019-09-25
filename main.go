@@ -5,6 +5,7 @@ import (
 	"io/ioutil"
 	"net/http"
 	"strings"
+	"time"
 
 	"encoding/json"
 	"encoding/xml"
@@ -105,9 +106,21 @@ func createRoomInfoJSONBody(room Room, event Event) []byte {
 	return roomInfoJSON
 }
 
+func callEventUpdater(waitDuration time.Duration, url string, roomInfoJSON []byte) {
+	time.Sleep(waitDuration)
+	fmt.Printf("    STUB: POST %v - %v...\n", url, string(roomInfoJSON)[:60])
+}
+
 func dispachEventUpdate(room Room, event Event, roomInfoJSON []byte) {
 	// TODO: call goroutine
-	fmt.Printf("    STUB: room %v - (%v) %v...\n", room.ID, event.Start, string(roomInfoJSON)[:60])
+	eventTime, err := time.Parse("2006-01-02T15:04:05-07:00", event.Date)
+	if err != nil {
+		fmt.Println("ERROR parsing date time. ", err)
+	}
+
+	nowTime := time.Now()
+	durationUntilEvent := eventTime.Sub(nowTime)
+	go callEventUpdater(durationUntilEvent, "URLREPLACETHIS", roomInfoJSON)
 
 }
 
