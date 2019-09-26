@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"io/ioutil"
+	"log"
 	"net/http"
 	"os"
 	"strconv"
@@ -118,7 +119,7 @@ func createRoomInfoJSONBody(room Room, event Event) []byte {
 
 	roomInfoJSON, err := json.Marshal(roomInfo)
 	if err != nil {
-		fmt.Println("Could not marshal roomInfo")
+		log.Println("Could not marshal roomInfo")
 		panic(err)
 	}
 	return roomInfoJSON
@@ -128,13 +129,13 @@ func callEventUpdater(waitDuration time.Duration, URL string, roomInfoJSON []byt
 	defer wg.Done()
 
 	time.Sleep(waitDuration)
-	fmt.Printf("CALL POST %v - %v\n", URL, string(roomInfoJSON))
+	log.Printf("CALL POST %v - %v\n", URL, string(roomInfoJSON))
 	resp, err := http.Post(URL, "application/json", bytes.NewBuffer(roomInfoJSON))
 
 	if err != nil {
-		fmt.Println(err)
+		log.Println(err)
 	} else if resp.StatusCode != http.StatusOK {
-		fmt.Println(resp)
+		log.Println(resp)
 	}
 
 }
@@ -142,14 +143,14 @@ func callEventUpdater(waitDuration time.Duration, URL string, roomInfoJSON []byt
 func dispachEventUpdate(room Room, event Event, roomInfoJSON []byte) {
 	eventTime, err := time.Parse("2006-01-02T15:04:05-07:00", event.Date)
 	if err != nil {
-		fmt.Println("ERROR parsing date time. ", err)
+		log.Println("ERROR parsing date time. ", err)
 	}
 
 	nowTime := time.Now()
 	durationUntilEvent := eventTime.Sub(nowTime)
 
 	roomURL := externalUpdateURL + strconv.Itoa(room.ID)
-	fmt.Printf("(updating in %v) %v - %v...\n", durationUntilEvent, roomURL, string(roomInfoJSON)[:60])
+	log.Printf("(updating in %v) %v - %v...\n", durationUntilEvent, roomURL, string(roomInfoJSON)[:60])
 
 	wg.Add(1)
 	go callEventUpdater(durationUntilEvent, roomURL, roomInfoJSON)
@@ -158,10 +159,10 @@ func dispachEventUpdate(room Room, event Event, roomInfoJSON []byte) {
 // function with side effects
 func remapScheduleToEventsPerRoom(roomsMap *map[int]Room, eventsPerRoom *map[int][]Event, schedule Schedule) {
 	for i, day := range schedule.Days {
-		fmt.Printf("Processing Day %v: %v\n", i+1, day.Start)
+		log.Printf("Processing Day %v: %v\n", i+1, day.Start)
 
 		for _, room := range day.Rooms {
-			fmt.Printf("= Processing Room: %v\n", room.Name)
+			log.Printf("= Processing Room: %v\n", room.Name)
 
 			for _, event := range room.Events {
 				(*roomsMap)[room.ID] = room
@@ -169,7 +170,7 @@ func remapScheduleToEventsPerRoom(roomsMap *map[int]Room, eventsPerRoom *map[int
 			}
 		}
 
-		fmt.Println("")
+		log.Println("")
 	}
 }
 
@@ -183,31 +184,31 @@ func ScheduleEventUpdaters(schedule Schedule) {
 
 	remapScheduleToEventsPerRoom(&roomsMap, &eventsPerRoom, schedule)
 
-	fmt.Println("#################")
+	log.Println("#################")
 	for roomID, eventsOnRoom := range eventsPerRoom {
-		fmt.Printf("... Processing events for room %v: %v\n", roomID, roomsMap[roomID].Name)
+		log.Printf("... Processing events for room %v: %v\n", roomID, roomsMap[roomID].Name)
 		for _, event := range eventsOnRoom {
-			fmt.Printf("... ... Processing event %v: %v: %v\n", event.GUID, event.Date, event.Title)
+			log.Printf("... ... Processing event %v: %v: %v\n", event.GUID, event.Date, event.Title)
 			roomInfoJSON := createRoomInfoJSONBody(roomsMap[roomID], event)
 
 			// this will create the goroutine:
 			dispachEventUpdate(roomsMap[roomID], event, roomInfoJSON)
 		}
 	}
-	fmt.Println("#################")
+	log.Println("#################")
 
 }
 
 // PrintScheduleInfo prints unmarshaled XML schedule
 func PrintScheduleInfo(schedule Schedule) {
-	fmt.Printf("XMLName: %#v\n", schedule.XMLName)
-	fmt.Printf("Event: %v\n", schedule.Conference.Title)
-	fmt.Printf("From %v to %v (%v days)\n\n", schedule.Conference.Start, schedule.Conference.End, schedule.Conference.Days)
+	log.Printf("XMLName: %#v\n", schedule.XMLName)
+	log.Printf("Event: %v\n", schedule.Conference.Title)
+	log.Printf("From %v to %v (%v days)\n\n", schedule.Conference.Start, schedule.Conference.End, schedule.Conference.Days)
 
 	for i, day := range schedule.Days {
-		fmt.Printf("Day %v: %v\n", i+1, day.Start)
+		log.Printf("Day %v: %v\n", i+1, day.Start)
 		for _, room := range day.Rooms {
-			fmt.Printf("= Room %v: %v\n", room.ID, room.Name)
+			log.Printf("= Room %v: %v\n", room.ID, room.Name)
 			for _, event := range room.Events {
 
 				// join multiple people per event
@@ -216,10 +217,10 @@ func PrintScheduleInfo(schedule Schedule) {
 					personsStr = append(personsStr, fmt.Sprintf("%v (%v)", s.Name, s.ID))
 				}
 
-				fmt.Printf("--- %v: %v - by %v\n", event.Start, event.Title, strings.Join(personsStr, ", "))
+				log.Printf("--- %v: %v - by %v\n", event.Start, event.Title, strings.Join(personsStr, ", "))
 			}
 		}
-		fmt.Println("")
+		log.Println("")
 	}
 }
 
@@ -251,15 +252,16 @@ func fixScheduleRoomsID(schedule *Schedule) {
 }
 
 func main() {
-	var body []byte
+	log.SetFlags(log.LstdFlags | log.Lshortfile)
 
+	var body []byte
 	// Get schedule from the official URL, or failback to local file
 	resp, err := http.Get(scheduleEventURL)
 	if err != nil {
-		fmt.Println("WARNING: Could not read remote URL. Fallbacking to local file")
+		log.Println("WARNING: Could not read remote URL. Fallbacking to local file")
 		body, err = ioutil.ReadFile(altLocalScheduleFile)
 		if err != nil {
-			fmt.Println("Error reading file. Does it exist?")
+			log.Println("Error reading file. Does it exist?")
 			panic(err)
 		}
 	} else {
@@ -271,20 +273,20 @@ func main() {
 	schedule := Schedule{}
 	err = xml.Unmarshal([]byte(body), &schedule)
 	if err != nil {
-		fmt.Printf("error: %v", err)
+		log.Printf("error: %v", err)
 		return
 	}
 	fixScheduleRoomsID(&schedule)
 
 	// Print parsed XML info
-	fmt.Println("############ Printing Schedule Info ############")
+	log.Println("############ Printing Schedule Info ############")
 	PrintScheduleInfo(schedule)
 
-	fmt.Println("############ Scheduling Event Updaters ############")
+	log.Println("############ Scheduling Event Updaters ############")
 	ScheduleEventUpdaters(schedule)
 
-	fmt.Println("############ Updates were scheduled. Just wait for them to finish... ############")
+	log.Println("############ Updates were scheduled. Just wait for them to finish... ############")
 
 	wg.Wait()
-	fmt.Println("Finished! No more events to update")
+	log.Println("Finished! No more events to update")
 }
