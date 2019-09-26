@@ -11,6 +11,16 @@ import (
 	"encoding/xml"
 )
 
+// GetEnv returns the Environment variable by key, or return a fallback value if the key is not set
+func GetEnv(key, fallback string) string {
+	if value, ok := os.LookupEnv(key); ok {
+		return value
+	}
+	return fallback
+}
+
+var scheduleEventURL = GetEnv("SCHEDULE_URL", "https://manage.ubucon.org/eu2019/schedule/export/schedule.xml")
+var altLocalScheduleFile = GetEnv("SCHEDULE_FILE", "schedule.xml")
 // Schedule is a sigleton containing all schedule info (see Days)
 type Schedule struct {
 	XMLName    xml.Name   `xml:"schedule"`
@@ -219,10 +229,6 @@ func fixScheduleRoomsID(schedule *Schedule) {
 }
 
 func main() {
-
-	// Fix: maybe not so hardcoded
-	scheduleEventURL := "https://manage.ubucon.org/eu2019/schedule/export/schedule.xml"
-	altLocalScheduleFile := "schedule.xml"
 	var body []byte
 
 	// Get schedule from the official URL, or failback to local file
