@@ -1,10 +1,14 @@
 package main
 
 import (
+	"bytes"
 	"fmt"
 	"io/ioutil"
 	"net/http"
+	"os"
+	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"encoding/json"
@@ -21,6 +25,10 @@ func GetEnv(key, fallback string) string {
 
 var scheduleEventURL = GetEnv("SCHEDULE_URL", "https://manage.ubucon.org/eu2019/schedule/export/schedule.xml")
 var altLocalScheduleFile = GetEnv("SCHEDULE_FILE", "schedule.xml")
+var externalUpdateURL = GetEnv("EXTERNAL_UPDATE_URL", "http://user@passw:localhost:3000/room/")
+var wg sync.WaitGroup
+var waitCounter time.Duration = 1 * time.Second
+
 // Schedule is a sigleton containing all schedule info (see Days)
 type Schedule struct {
 	XMLName    xml.Name   `xml:"schedule"`
@@ -116,13 +124,22 @@ func createRoomInfoJSONBody(room Room, event Event) []byte {
 	return roomInfoJSON
 }
 
-func callEventUpdater(waitDuration time.Duration, url string, roomInfoJSON []byte) {
+func callEventUpdater(waitDuration time.Duration, URL string, roomInfoJSON []byte) {
+	defer wg.Done()
+
 	time.Sleep(waitDuration)
-	fmt.Printf("    STUB: POST %v - %v...\n", url, string(roomInfoJSON)[:60])
+	fmt.Printf("CALL POST %v - %v\n", URL, string(roomInfoJSON))
+	resp, err := http.Post(URL, "application/json", bytes.NewBuffer(roomInfoJSON))
+
+	if err != nil {
+		fmt.Println(err)
+	} else if resp.StatusCode != http.StatusOK {
+		fmt.Println(resp)
+	}
+
 }
 
 func dispachEventUpdate(room Room, event Event, roomInfoJSON []byte) {
-	// TODO: call goroutine
 	eventTime, err := time.Parse("2006-01-02T15:04:05-07:00", event.Date)
 	if err != nil {
 		fmt.Println("ERROR parsing date time. ", err)
@@ -130,8 +147,12 @@ func dispachEventUpdate(room Room, event Event, roomInfoJSON []byte) {
 
 	nowTime := time.Now()
 	durationUntilEvent := eventTime.Sub(nowTime)
-	go callEventUpdater(durationUntilEvent, "URLREPLACETHIS", roomInfoJSON)
 
+	roomURL := externalUpdateURL + strconv.Itoa(room.ID)
+	fmt.Printf("(updating in %v) %v - %v...\n", durationUntilEvent, roomURL, string(roomInfoJSON)[:60])
+
+	wg.Add(1)
+	go callEventUpdater(durationUntilEvent, roomURL, roomInfoJSON)
 }
 
 // function with side effects
@@ -166,8 +187,9 @@ func ScheduleEventUpdaters(schedule Schedule) {
 	for roomID, eventsOnRoom := range eventsPerRoom {
 		fmt.Printf("... Processing events for room %v: %v\n", roomID, roomsMap[roomID].Name)
 		for _, event := range eventsOnRoom {
-			fmt.Printf("... ... Processing event %v: %v: %v\n", event.GUID, event.Start, event.Title)
+			fmt.Printf("... ... Processing event %v: %v: %v\n", event.GUID, event.Date, event.Title)
 			roomInfoJSON := createRoomInfoJSONBody(roomsMap[roomID], event)
+
 			// this will create the goroutine:
 			dispachEventUpdate(roomsMap[roomID], event, roomInfoJSON)
 		}
@@ -261,5 +283,8 @@ func main() {
 	fmt.Println("############ Scheduling Event Updaters ############")
 	ScheduleEventUpdaters(schedule)
 
-	fmt.Println("############ Updates were scheduled. Just wait for them to finish... (WIP - NOT WORKING YET) ############")
+	fmt.Println("############ Updates were scheduled. Just wait for them to finish... ############")
+
+	wg.Wait()
+	fmt.Println("Finished! No more events to update")
 }
