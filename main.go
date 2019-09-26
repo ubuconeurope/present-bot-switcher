@@ -1,14 +1,34 @@
 package main
 
 import (
+	"bytes"
 	"fmt"
 	"io/ioutil"
+	"log"
 	"net/http"
+	"os"
+	"strconv"
 	"strings"
+	"sync"
+	"time"
 
 	"encoding/json"
 	"encoding/xml"
 )
+
+// GetEnv returns the Environment variable by key, or return a fallback value if the key is not set
+func GetEnv(key, fallback string) string {
+	if value, ok := os.LookupEnv(key); ok {
+		return value
+	}
+	return fallback
+}
+
+var scheduleEventURL = GetEnv("SCHEDULE_URL", "https://manage.ubucon.org/eu2019/schedule/export/schedule.xml")
+var altLocalScheduleFile = GetEnv("SCHEDULE_FILE", "schedule.xml")
+var externalUpdateURL = GetEnv("EXTERNAL_UPDATE_URL", "http://user@passw:localhost:3000/room/")
+var wg sync.WaitGroup
+var waitCounter time.Duration = 1 * time.Second
 
 // Schedule is a sigleton containing all schedule info (see Days)
 type Schedule struct {
@@ -46,6 +66,7 @@ type Room struct {
 type Event struct {
 	ID          int      `xml:"id,attr"`
 	GUID        string   `xml:"guid,attr"`
+	Date        string   `xml:"date"`
 	Title       string   `xml:"title"`
 	Start       string   `xml:"start"`    // Hour:Minute
 	Duration    string   `xml:"duration"` // Hour:Minute
@@ -98,47 +119,96 @@ func createRoomInfoJSONBody(room Room, event Event) []byte {
 
 	roomInfoJSON, err := json.Marshal(roomInfo)
 	if err != nil {
-		fmt.Println("Could not marshal roomInfo")
+		log.Println("Could not marshal roomInfo")
 		panic(err)
 	}
 	return roomInfoJSON
 }
 
+func callEventUpdater(waitDuration time.Duration, URL string, roomInfoJSON []byte) {
+	defer wg.Done()
+
+	time.Sleep(waitDuration)
+	log.Printf("CALL POST %v - %v\n", URL, string(roomInfoJSON))
+	resp, err := http.Post(URL, "application/json", bytes.NewBuffer(roomInfoJSON))
+
+	if err != nil {
+		log.Println(err)
+	} else if resp.StatusCode != http.StatusOK {
+		log.Println(resp)
+	}
+
+}
+
 func dispachEventUpdate(room Room, event Event, roomInfoJSON []byte) {
-	// TODO: call goroutine
+	eventTime, err := time.Parse("2006-01-02T15:04:05-07:00", event.Date)
+	if err != nil {
+		log.Println("ERROR parsing date time. ", err)
+	}
+
+	nowTime := time.Now()
+	durationUntilEvent := eventTime.Sub(nowTime)
+
+	roomURL := externalUpdateURL + strconv.Itoa(room.ID)
+	log.Printf("(updating in %v) %v - %v...\n", durationUntilEvent, roomURL, string(roomInfoJSON)[:60])
+
+	wg.Add(1)
+	go callEventUpdater(durationUntilEvent, roomURL, roomInfoJSON)
+}
+
+// function with side effects
+func remapScheduleToEventsPerRoom(roomsMap *map[int]Room, eventsPerRoom *map[int][]Event, schedule Schedule) {
+	for i, day := range schedule.Days {
+		log.Printf("Processing Day %v: %v\n", i+1, day.Start)
+
+		for _, room := range day.Rooms {
+			log.Printf("= Processing Room: %v\n", room.Name)
+
+			for _, event := range room.Events {
+				(*roomsMap)[room.ID] = room
+				(*eventsPerRoom)[room.ID] = append((*eventsPerRoom)[room.ID], event)
+			}
+		}
+
+		log.Println("")
+	}
 }
 
 // ScheduleEventUpdaters will create a goroutine for each event,
 //   and request an update at the event time
 func ScheduleEventUpdaters(schedule Schedule) {
 
-	for i, day := range schedule.Days {
-		fmt.Printf("Processing Day %v: %v\n", i+1, day.Start)
+	// map(Room.ID)Room
+	roomsMap := make(map[int]Room)
+	eventsPerRoom := make(map[int][]Event)
 
-		for _, room := range day.Rooms {
-			fmt.Printf("= Processing Room: %v\n", room.Name)
+	remapScheduleToEventsPerRoom(&roomsMap, &eventsPerRoom, schedule)
 
-			for _, event := range room.Events {
-				fmt.Printf("... Processing event %v: %v: %v\n", event.GUID, event.Start, event.Title)
-				roomInfoJSON := createRoomInfoJSONBody(room, event)
-				// this will create the goroutine:
-				dispachEventUpdate(room, event, roomInfoJSON)
-			}
+	log.Println("#################")
+	for roomID, eventsOnRoom := range eventsPerRoom {
+		log.Printf("... Processing events for room %v: %v\n", roomID, roomsMap[roomID].Name)
+		for _, event := range eventsOnRoom {
+			log.Printf("... ... Processing event %v: %v: %v\n", event.GUID, event.Date, event.Title)
+			roomInfoJSON := createRoomInfoJSONBody(roomsMap[roomID], event)
+
+			// this will create the goroutine:
+			dispachEventUpdate(roomsMap[roomID], event, roomInfoJSON)
 		}
-		fmt.Println("")
 	}
+	log.Println("#################")
+
 }
 
 // PrintScheduleInfo prints unmarshaled XML schedule
 func PrintScheduleInfo(schedule Schedule) {
-	fmt.Printf("XMLName: %#v\n", schedule.XMLName)
-	fmt.Printf("Event: %v\n", schedule.Conference.Title)
-	fmt.Printf("From %v to %v (%v days)\n\n", schedule.Conference.Start, schedule.Conference.End, schedule.Conference.Days)
+	log.Printf("XMLName: %#v\n", schedule.XMLName)
+	log.Printf("Event: %v\n", schedule.Conference.Title)
+	log.Printf("From %v to %v (%v days)\n\n", schedule.Conference.Start, schedule.Conference.End, schedule.Conference.Days)
 
 	for i, day := range schedule.Days {
-		fmt.Printf("Day %v: %v\n", i+1, day.Start)
+		log.Printf("Day %v: %v\n", i+1, day.Start)
 		for _, room := range day.Rooms {
-			fmt.Printf("= Room %v: %v\n", room.ID, room.Name)
+			log.Printf("= Room %v: %v\n", room.ID, room.Name)
 			for _, event := range room.Events {
 
 				// join multiple people per event
@@ -147,10 +217,10 @@ func PrintScheduleInfo(schedule Schedule) {
 					personsStr = append(personsStr, fmt.Sprintf("%v (%v)", s.Name, s.ID))
 				}
 
-				fmt.Printf("--- %v: %v - by %v\n", event.Start, event.Title, strings.Join(personsStr, ", "))
+				log.Printf("--- %v: %v - by %v\n", event.Start, event.Title, strings.Join(personsStr, ", "))
 			}
 		}
-		fmt.Println("")
+		log.Println("")
 	}
 }
 
@@ -182,33 +252,41 @@ func fixScheduleRoomsID(schedule *Schedule) {
 }
 
 func main() {
+	log.SetFlags(log.LstdFlags | log.Lshortfile)
 
-	// Fix: maybe not so hardcoded
-	scheduleEventURL := "https://manage.ubucon.org/eu2019/schedule/export/schedule.xml"
-
-	// Get schedule from the official URL
+	var body []byte
+	// Get schedule from the official URL, or failback to local file
 	resp, err := http.Get(scheduleEventURL)
 	if err != nil {
-		panic(err)
+		log.Println("WARNING: Could not read remote URL. Fallbacking to local file")
+		body, err = ioutil.ReadFile(altLocalScheduleFile)
+		if err != nil {
+			log.Println("Error reading file. Does it exist?")
+			panic(err)
+		}
+	} else {
+		body, err = ioutil.ReadAll(resp.Body)
+		resp.Body.Close()
 	}
-	body, err := ioutil.ReadAll(resp.Body)
-	resp.Body.Close()
 
 	// Parse XML
 	schedule := Schedule{}
 	err = xml.Unmarshal([]byte(body), &schedule)
 	if err != nil {
-		fmt.Printf("error: %v", err)
+		log.Printf("error: %v", err)
 		return
 	}
 	fixScheduleRoomsID(&schedule)
 
 	// Print parsed XML info
-	fmt.Println("############ Printing Schedule Info ############")
+	log.Println("############ Printing Schedule Info ############")
 	PrintScheduleInfo(schedule)
 
-	fmt.Println("############ Scheduling Event Updaters ############")
+	log.Println("############ Scheduling Event Updaters ############")
 	ScheduleEventUpdaters(schedule)
 
-	fmt.Println("############ Updates were scheduled. Just wait for them to finish... (WIP - NOT WORKING YET) ############")
+	log.Println("############ Updates were scheduled. Just wait for them to finish... ############")
+
+	wg.Wait()
+	log.Println("Finished! No more events to update")
 }

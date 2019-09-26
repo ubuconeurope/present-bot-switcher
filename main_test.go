@@ -83,3 +83,133 @@ func TestCreateRoomInfoJSONBody(t *testing.T) {
 		t.Errorf("Result was not expected\n\nGot:\n%v\nExpected:\n%v\n..........\n", string(roomInfoJSON), expectedJSON)
 	}
 }
+
+func TestRemapScheduleToEventsPerRoom(t *testing.T) {
+
+	testingSchedule := Schedule{
+		Days: []Day{
+			Day{
+				Rooms: []Room{
+					Room{
+						ID:   1,
+						Name: "Room1",
+						Events: []Event{
+							Event{
+								GUID:  "abc1",
+								Title: "Event1",
+							},
+							Event{
+								GUID:  "abc2",
+								Title: "Event2",
+							},
+							Event{
+								GUID:  "abc3",
+								Title: "Event3",
+							},
+						},
+					},
+					Room{
+						ID:   2,
+						Name: "Room2",
+						Events: []Event{
+							Event{
+								GUID:  "abc4",
+								Title: "Event4",
+							},
+							Event{
+								GUID:  "abc5",
+								Title: "Event5",
+							},
+							Event{
+								GUID:  "abc6",
+								Title: "Event6",
+							},
+						},
+					},
+				},
+			},
+			Day{
+				Rooms: []Room{
+					Room{
+						ID:   1,
+						Name: "Room1",
+						Events: []Event{
+							Event{
+								GUID:  "cde1",
+								Title: "OtherEvent1",
+							},
+						},
+					},
+					Room{
+						ID:   2,
+						Name: "Room2",
+						Events: []Event{
+							Event{
+								GUID:  "cde4",
+								Title: "OtherEvent4",
+							},
+							Event{
+								GUID:  "cde5",
+								Title: "OtherEvent5",
+							},
+							Event{
+								GUID:  "cde6",
+								Title: "OtherEvent6",
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	roomsMap := make(map[int]Room)
+	eventsPerRoom := make(map[int][]Event)
+
+	remapScheduleToEventsPerRoom(&roomsMap, &eventsPerRoom, testingSchedule)
+
+	if len(roomsMap) != 2 || len(eventsPerRoom) != 2 {
+		t.Error("Unexpected length for 2 rooms. Got", len(roomsMap), ",", len(eventsPerRoom))
+	}
+
+	// ########## Test roomMap
+	expectedRoomMap := map[int]Room{
+		1: Room{ID: 1, Name: "Room1"},
+		2: Room{ID: 2, Name: "Room2"},
+	}
+	for i, r := range roomsMap {
+		if r.ID != expectedRoomMap[i].ID || r.Name != expectedRoomMap[i].Name {
+			t.Errorf("Unexpected roomMap on id=%v.\nGot: %v-%v\nExpected: %v-%v", i, r.ID, r.Name, expectedRoomMap[i].ID, expectedRoomMap[i].Name)
+		}
+	}
+
+	// ########## Test eventsPerRoom
+	expectedEventsPerRoom := map[int][]struct {
+		GUID  string
+		title string
+	}{
+		1: {
+			{GUID: "abc1", title: "Event1"},
+			{GUID: "abc2", title: "Event2"},
+			{GUID: "abc3", title: "Event3"},
+			{GUID: "cde1", title: "OtherEvent1"},
+		},
+		2: {
+			{GUID: "abc4", title: "Event4"},
+			{GUID: "abc5", title: "Event5"},
+			{GUID: "abc6", title: "Event6"},
+			{GUID: "cde4", title: "OtherEvent4"},
+			{GUID: "cde5", title: "OtherEvent5"},
+			{GUID: "cde6", title: "OtherEvent6"},
+		},
+	}
+
+	for i, evts := range eventsPerRoom {
+		for j, ev := range evts {
+			if ev.GUID != expectedEventsPerRoom[i][j].GUID || ev.Title != expectedEventsPerRoom[i][j].title {
+				t.Errorf("Unexpected eventsPerRoom on id=%v.\nGot: %v-%v\nExpected: %v-%v", i, ev.GUID, ev.Title, expectedEventsPerRoom[i][j].GUID, expectedEventsPerRoom[i][j].title)
+			}
+		}
+	}
+
+}
