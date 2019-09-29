@@ -94,6 +94,7 @@ type RoomInfo struct {
 	NextTitle      string `json:"n_title"`
 	NextSpeaker    string `json:"n_speaker"`
 	NextTime       string `json:"n_time"`
+	AutoLoopSec    int    `json:"auto_loop_sec"`
 }
 
 // createRoomInfoJSONBody creates a goroutine and request an update at the event time
@@ -111,6 +112,7 @@ func createRoomInfoJSONBody(room Room, event, nextEvent Event) []byte {
 	roomInfo.CurrentTitle = event.Title
 	roomInfo.CurrentSpeaker = strings.Join(speakers, ", ")
 	roomInfo.CurrentTime = event.Start
+	roomInfo.AutoLoopSec = 5
 
 	// XXX: assuming empty Event has title = ""
 	if nextEvent.Title != "" {
