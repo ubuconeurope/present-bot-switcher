@@ -76,9 +76,18 @@ func TestCreateRoomInfoJSONBody(t *testing.T) {
 			},
 		},
 	}
+	nextEvent := Event{
+		Title: "EventTitle2",
+		Start: "11:00",
+		Persons: []Person{
+			Person{
+				Name: "PersonName2",
+			},
+		},
+	}
 
-	roomInfoJSON := createRoomInfoJSONBody(room, event)
-	expectedJSON := `{"room_id":1,"room":"RoomName","title":"EventTitle","speaker":"PersonName1, PersonName2","time":"10:00","n_title":"","n_speaker":"","n_time":""}`
+	roomInfoJSON := createRoomInfoJSONBody(room, event, nextEvent)
+	expectedJSON := `{"room_id":1,"room":"RoomName","title":"EventTitle","speaker":"PersonName1, PersonName2","time":"10:00","n_title":"EventTitle2","n_speaker":"PersonName2","n_time":"11:00"}`
 
 	if string(roomInfoJSON) != expectedJSON {
 		t.Errorf("Result was not expected\n\nGot:\n%v\nExpected:\n%v\n..........\n", string(roomInfoJSON), expectedJSON)
