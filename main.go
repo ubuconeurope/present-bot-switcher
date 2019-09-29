@@ -137,7 +137,29 @@ func callEventUpdater(waitDuration time.Duration, URL string, roomInfoJSON []byt
 	} else if resp.StatusCode != http.StatusOK {
 		log.Println(resp)
 	}
+}
 
+// ParseCustomDuration parses HH:MM format. Returns 0 duration on error.
+func ParseCustomDuration(durationStr string) (time.Duration, error) {
+	var duration time.Duration
+
+	hoursMinutes := strings.Split(durationStr, ":")
+
+	if len(hoursMinutes) != 2 {
+		return duration, fmt.Errorf("error: invalid format for durationStr. Expected 'hh:mm' got: %v", durationStr)
+	}
+
+	hours, err := strconv.Atoi(hoursMinutes[0])
+	if err != nil {
+		return duration, fmt.Errorf("error parsing hour value (%v): %v", durationStr, err)
+	}
+	mins, err2 := strconv.Atoi(hoursMinutes[1])
+	if err2 != nil {
+		return duration, fmt.Errorf("error parsing minute value (%v): %v", durationStr, err)
+	}
+
+	duration = time.Duration(hours)*time.Hour + time.Duration(mins)*time.Minute
+	return duration, nil
 }
 
 func dispachEventUpdate(room Room, event Event, roomInfoJSON []byte) {
