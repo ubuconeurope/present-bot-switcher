@@ -26,7 +26,7 @@ func GetEnv(key, fallback string) string {
 
 var scheduleEventURL = GetEnv("SCHEDULE_URL", "https://manage.ubucon.org/eu2019/schedule/export/schedule.xml")
 var altLocalScheduleFile = GetEnv("SCHEDULE_FILE", "schedule.xml")
-var externalUpdateURL = GetEnv("EXTERNAL_UPDATE_URL", "http://user@passw:localhost:3000/room/")
+var externalUpdateURL = GetEnv("EXTERNAL_UPDATE_URL", "http://user:passw@localhost:3000/rooms/")
 var wg sync.WaitGroup
 var waitCounter time.Duration = 1 * time.Second
 
