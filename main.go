@@ -178,29 +178,39 @@ func ParseCustomDuration(durationStr string) (time.Duration, error) {
 	return duration, nil
 }
 
-func dispachEventUpdate(room Room, previousEvent Event, roomInfoJSON []byte) {
+func dispachEventUpdate(room Room, previousEvent, currentEvent Event, roomInfoJSON []byte) {
 	var durationUntilEventEnd time.Duration
+	nowTime := time.Now()
 
-	// If there is no previousEvent, trigger the goroutine now
-	if previousEvent.Date == "" {
-		durationUntilEventEnd = time.Duration(0)
-	} else {
-		previousEventTime, err := time.Parse("2006-01-02T15:04:05-07:00", previousEvent.Date)
-		if err != nil {
-			log.Println("ERROR parsing date time. ", err)
-		}
-		previousEventDuration, _ := ParseCustomDuration(previousEvent.Duration)
-
-		previousEventEndTime := previousEventTime.Add(previousEventDuration)
-		nowTime := time.Now()
-		durationUntilEventEnd = previousEventEndTime.Sub(nowTime)
+	currentEventTime, err := time.Parse("2006-01-02T15:04:05-07:00", currentEvent.Date)
+	if err != nil {
+		log.Println("ERROR parsing date time. ", err)
 	}
+	currentEventDuration, _ := ParseCustomDuration(currentEvent.Duration)
+	currentEventEndTime := currentEventTime.Add(currentEventDuration)
 
-	roomURL := externalUpdateURL + strconv.Itoa(room.ID)
-	log.Printf("(updating in %v) %v - %v...\n", durationUntilEventEnd, roomURL, string(roomInfoJSON)[:60])
+	// Only trigger the goroutine if the event is not finished
+	if testMode || nowTime.Before(currentEventEndTime) {
+		// If there is no previousEvent, trigger the goroutine now
+		if previousEvent.Date == "" {
+			durationUntilEventEnd = time.Duration(0)
+		} else {
+			previousEventTime, err := time.Parse("2006-01-02T15:04:05-07:00", previousEvent.Date)
+			if err != nil {
+				log.Println("ERROR parsing date time. ", err)
+			}
+			previousEventDuration, _ := ParseCustomDuration(previousEvent.Duration)
 
-	wg.Add(1)
-	go callEventUpdater(durationUntilEventEnd, roomURL, roomInfoJSON)
+			previousEventEndTime := previousEventTime.Add(previousEventDuration)
+			durationUntilEventEnd = previousEventEndTime.Sub(nowTime)
+		}
+
+		roomURL := externalUpdateURL + strconv.Itoa(room.ID)
+		log.Printf("(updating in %v) %v - %v...\n", durationUntilEventEnd, roomURL, string(roomInfoJSON)[:60])
+
+		wg.Add(1)
+		go callEventUpdater(durationUntilEventEnd, roomURL, roomInfoJSON)
+	}
 }
 
 // function with side effects
@@ -251,7 +261,7 @@ func ScheduleEventUpdaters(schedule Schedule) {
 			roomInfoJSON := createRoomInfoJSONBody(roomsMap[roomID], currentEvent, nextEvent)
 
 			// this will create the goroutine:
-			dispachEventUpdate(roomsMap[roomID], previousEvent, roomInfoJSON)
+			dispachEventUpdate(roomsMap[roomID], previousEvent, currentEvent, roomInfoJSON)
 		}
 	}
 	log.Println("#################")
