@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/xml"
 	"testing"
+	"time"
 )
 
 func TestFixScheduleRoomsID(t *testing.T) {
@@ -75,9 +76,18 @@ func TestCreateRoomInfoJSONBody(t *testing.T) {
 			},
 		},
 	}
+	nextEvent := Event{
+		Title: "EventTitle2",
+		Start: "11:00",
+		Persons: []Person{
+			Person{
+				Name: "PersonName2",
+			},
+		},
+	}
 
-	roomInfoJSON := createRoomInfoJSONBody(room, event)
-	expectedJSON := `{"room_id":1,"room":"RoomName","title":"EventTitle","speaker":"PersonName1, PersonName2","time":"10:00","n_title":"","n_speaker":"","n_time":""}`
+	roomInfoJSON := createRoomInfoJSONBody(room, event, nextEvent)
+	expectedJSON := `{"room_id":1,"room":"RoomName","title":"EventTitle","speaker":"PersonName1, PersonName2","time":"10:00","n_title":"EventTitle2","n_speaker":"PersonName2","n_time":"11:00","auto_loop_sec":5}`
 
 	if string(roomInfoJSON) != expectedJSON {
 		t.Errorf("Result was not expected\n\nGot:\n%v\nExpected:\n%v\n..........\n", string(roomInfoJSON), expectedJSON)
@@ -212,4 +222,45 @@ func TestRemapScheduleToEventsPerRoom(t *testing.T) {
 		}
 	}
 
+}
+
+func justParseDuration(str string) time.Duration {
+	dur, _ := time.ParseDuration(str)
+	return dur
+}
+
+func TestParseCustomDuration(t *testing.T) {
+	var x time.Duration
+	var err error
+
+	// parsing perfectly normal duration string
+	if x, _ = ParseCustomDuration("00:30"); x != justParseDuration("30m") {
+		t.Error("Unexpected duration (00:30): ", x)
+	}
+	if x, _ = ParseCustomDuration("02:35"); x != justParseDuration("2h35m") {
+		t.Error("Unexpected duration (02:35): ", x)
+	}
+	if x, _ = ParseCustomDuration("00:00"); x != justParseDuration("0m") {
+		t.Error("Unexpected duration (00:00): ", x)
+	}
+
+	// Parsing durations with error
+	if x, err = ParseCustomDuration(""); x != justParseDuration("0m") || err.Error() != "error: invalid format for durationStr. Expected 'hh:mm' got: " {
+		t.Errorf("Error was expected (<empty_duration>: %v). '%v'", x, err)
+	}
+	if x, err = ParseCustomDuration("10"); x != justParseDuration("0m") || err.Error() != "error: invalid format for durationStr. Expected 'hh:mm' got: 10" {
+		t.Errorf("Error was expected (10: %v). '%v'", x, err)
+	}
+	if x, err = ParseCustomDuration("xx"); x != justParseDuration("0m") || err.Error() != "error: invalid format for durationStr. Expected 'hh:mm' got: xx" {
+		t.Errorf("Error was expected (xx: %v). '%v'", x, err)
+	}
+	if x, err = ParseCustomDuration("01:01:01"); x != justParseDuration("0m") || err.Error() != "error: invalid format for durationStr. Expected 'hh:mm' got: 01:01:01" {
+		t.Errorf("Error was expected (01:01:01: %v). '%v'", x, err)
+	}
+	if x, err = ParseCustomDuration("xx:01"); x != justParseDuration("0m") || err.Error() != "error parsing hour value (xx:01): strconv.Atoi: parsing \"xx\": invalid syntax" {
+		t.Errorf("Error was expected (xx:01: %v). '%v'", x, err)
+	}
+	if x, err = ParseCustomDuration("01:xx"); x != justParseDuration("0m") || err.Error() != "error parsing minute value (01:xx): <nil>" {
+		t.Errorf("Error was expected (01:xx: %v). '%v'", x, err)
+	}
 }

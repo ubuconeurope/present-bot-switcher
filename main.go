@@ -26,9 +26,10 @@ func GetEnv(key, fallback string) string {
 
 var scheduleEventURL = GetEnv("SCHEDULE_URL", "https://manage.ubucon.org/eu2019/schedule/export/schedule.xml")
 var altLocalScheduleFile = GetEnv("SCHEDULE_FILE", "schedule.xml")
-var externalUpdateURL = GetEnv("EXTERNAL_UPDATE_URL", "http://user@passw:localhost:3000/room/")
+var externalUpdateURL = GetEnv("EXTERNAL_UPDATE_URL", "http://user:passw@localhost:3000/rooms/")
 var wg sync.WaitGroup
-var waitCounter time.Duration = 1 * time.Second
+var waitCounter time.Duration = time.Second
+var testMode, _ = strconv.ParseBool(GetEnv("TEST_MODE", "false")) // send an event update each second
 
 // Schedule is a sigleton containing all schedule info (see Days)
 type Schedule struct {
@@ -94,10 +95,11 @@ type RoomInfo struct {
 	NextTitle      string `json:"n_title"`
 	NextSpeaker    string `json:"n_speaker"`
 	NextTime       string `json:"n_time"`
+	AutoLoopSec    int    `json:"auto_loop_sec"`
 }
 
 // createRoomInfoJSONBody creates a goroutine and request an update at the event time
-func createRoomInfoJSONBody(room Room, event Event) []byte {
+func createRoomInfoJSONBody(room Room, event, nextEvent Event) []byte {
 	var roomInfo RoomInfo
 
 	// join multiple people per event
@@ -111,11 +113,19 @@ func createRoomInfoJSONBody(room Room, event Event) []byte {
 	roomInfo.CurrentTitle = event.Title
 	roomInfo.CurrentSpeaker = strings.Join(speakers, ", ")
 	roomInfo.CurrentTime = event.Start
+	roomInfo.AutoLoopSec = 5
 
-	// TODO: fill with next event
-	roomInfo.NextTitle = ""
-	roomInfo.NextSpeaker = ""
-	roomInfo.NextTime = ""
+	// XXX: assuming empty Event has title = ""
+	if nextEvent.Title != "" {
+		var nextSpeakers []string
+		for _, p := range nextEvent.Persons {
+			nextSpeakers = append(nextSpeakers, fmt.Sprintf("%v", p.Name))
+		}
+
+		roomInfo.NextTitle = nextEvent.Title
+		roomInfo.NextSpeaker = strings.Join(nextSpeakers, ", ")
+		roomInfo.NextTime = nextEvent.Start
+	}
 
 	roomInfoJSON, err := json.Marshal(roomInfo)
 	if err != nil {
@@ -128,7 +138,13 @@ func createRoomInfoJSONBody(room Room, event Event) []byte {
 func callEventUpdater(waitDuration time.Duration, URL string, roomInfoJSON []byte) {
 	defer wg.Done()
 
-	time.Sleep(waitDuration)
+	if testMode {
+		waitCounter += time.Second
+		time.Sleep(waitCounter)
+	} else {
+		time.Sleep(waitDuration)
+	}
+
 	log.Printf("CALL POST %v - %v\n", URL, string(roomInfoJSON))
 	resp, err := http.Post(URL, "application/json", bytes.NewBuffer(roomInfoJSON))
 
@@ -137,23 +153,64 @@ func callEventUpdater(waitDuration time.Duration, URL string, roomInfoJSON []byt
 	} else if resp.StatusCode != http.StatusOK {
 		log.Println(resp)
 	}
-
 }
 
-func dispachEventUpdate(room Room, event Event, roomInfoJSON []byte) {
-	eventTime, err := time.Parse("2006-01-02T15:04:05-07:00", event.Date)
+// ParseCustomDuration parses HH:MM format. Returns 0 duration on error.
+func ParseCustomDuration(durationStr string) (time.Duration, error) {
+	var duration time.Duration
+
+	hoursMinutes := strings.Split(durationStr, ":")
+
+	if len(hoursMinutes) != 2 {
+		return duration, fmt.Errorf("error: invalid format for durationStr. Expected 'hh:mm' got: %v", durationStr)
+	}
+
+	hours, err := strconv.Atoi(hoursMinutes[0])
+	if err != nil {
+		return duration, fmt.Errorf("error parsing hour value (%v): %v", durationStr, err)
+	}
+	mins, err2 := strconv.Atoi(hoursMinutes[1])
+	if err2 != nil {
+		return duration, fmt.Errorf("error parsing minute value (%v): %v", durationStr, err)
+	}
+
+	duration = time.Duration(hours)*time.Hour + time.Duration(mins)*time.Minute
+	return duration, nil
+}
+
+func dispachEventUpdate(room Room, previousEvent, currentEvent Event, roomInfoJSON []byte) {
+	var durationUntilEventEnd time.Duration
+	nowTime := time.Now()
+
+	currentEventTime, err := time.Parse("2006-01-02T15:04:05-07:00", currentEvent.Date)
 	if err != nil {
 		log.Println("ERROR parsing date time. ", err)
 	}
+	currentEventDuration, _ := ParseCustomDuration(currentEvent.Duration)
+	currentEventEndTime := currentEventTime.Add(currentEventDuration)
 
-	nowTime := time.Now()
-	durationUntilEvent := eventTime.Sub(nowTime)
+	// Only trigger the goroutine if the event is not finished
+	if testMode || nowTime.Before(currentEventEndTime) {
+		// If there is no previousEvent, trigger the goroutine now
+		if previousEvent.Date == "" {
+			durationUntilEventEnd = time.Duration(0)
+		} else {
+			previousEventTime, err := time.Parse("2006-01-02T15:04:05-07:00", previousEvent.Date)
+			if err != nil {
+				log.Println("ERROR parsing date time. ", err)
+			}
+			previousEventDuration, _ := ParseCustomDuration(previousEvent.Duration)
 
-	roomURL := externalUpdateURL + strconv.Itoa(room.ID)
-	log.Printf("(updating in %v) %v - %v...\n", durationUntilEvent, roomURL, string(roomInfoJSON)[:60])
+			previousEventEndTime := previousEventTime.Add(previousEventDuration)
+			durationUntilEventEnd = previousEventEndTime.Sub(nowTime)
+		}
 
-	wg.Add(1)
-	go callEventUpdater(durationUntilEvent, roomURL, roomInfoJSON)
+		roomURL := externalUpdateURL + strconv.Itoa(room.ID)
+		log.Printf("(updating in %v) %v - %v...\n", durationUntilEventEnd, roomURL, string(roomInfoJSON)[:60])
+
+		wg.Add(1)
+		go callEventUpdater(durationUntilEventEnd, roomURL, roomInfoJSON)
+	}
 }
 
 // function with side effects
@@ -174,6 +231,13 @@ func remapScheduleToEventsPerRoom(roomsMap *map[int]Room, eventsPerRoom *map[int
 	}
 }
 
+func getEvent(events []Event, index int) Event {
+	if index >= 0 && index < len(events) {
+		return events[index]
+	}
+	return Event{}
+}
+
 // ScheduleEventUpdaters will create a goroutine for each event,
 //   and request an update at the event time
 func ScheduleEventUpdaters(schedule Schedule) {
@@ -187,12 +251,17 @@ func ScheduleEventUpdaters(schedule Schedule) {
 	log.Println("#################")
 	for roomID, eventsOnRoom := range eventsPerRoom {
 		log.Printf("... Processing events for room %v: %v\n", roomID, roomsMap[roomID].Name)
-		for _, event := range eventsOnRoom {
-			log.Printf("... ... Processing event %v: %v: %v\n", event.GUID, event.Date, event.Title)
-			roomInfoJSON := createRoomInfoJSONBody(roomsMap[roomID], event)
+
+		for i := 0; i < len(eventsOnRoom); i++ {
+			previousEvent := getEvent(eventsOnRoom, i-1)
+			currentEvent := getEvent(eventsOnRoom, i)
+			nextEvent := getEvent(eventsOnRoom, i+1)
+
+			log.Printf("... ... Processing event %v: %v: %v\n", currentEvent.ID, currentEvent.Date, currentEvent.Title)
+			roomInfoJSON := createRoomInfoJSONBody(roomsMap[roomID], currentEvent, nextEvent)
 
 			// this will create the goroutine:
-			dispachEventUpdate(roomsMap[roomID], event, roomInfoJSON)
+			dispachEventUpdate(roomsMap[roomID], previousEvent, currentEvent, roomInfoJSON)
 		}
 	}
 	log.Println("#################")
