@@ -29,6 +29,7 @@ var altLocalScheduleFile = GetEnv("SCHEDULE_FILE", "schedule.xml")
 var externalUpdateURL = GetEnv("EXTERNAL_UPDATE_URL", "http://user:passw@localhost:3000/rooms/")
 var wg sync.WaitGroup
 var waitCounter time.Duration = time.Second
+var testMode, _ = strconv.ParseBool(GetEnv("TEST_MODE", "false")) // send an event update each second
 
 // Schedule is a sigleton containing all schedule info (see Days)
 type Schedule struct {
@@ -137,7 +138,13 @@ func createRoomInfoJSONBody(room Room, event, nextEvent Event) []byte {
 func callEventUpdater(waitDuration time.Duration, URL string, roomInfoJSON []byte) {
 	defer wg.Done()
 
-	time.Sleep(waitDuration)
+	if testMode {
+		waitCounter += time.Second
+		time.Sleep(waitCounter)
+	} else {
+		time.Sleep(waitDuration)
+	}
+
 	log.Printf("CALL POST %v - %v\n", URL, string(roomInfoJSON))
 	resp, err := http.Post(URL, "application/json", bytes.NewBuffer(roomInfoJSON))
 
@@ -218,8 +225,8 @@ func getEvent(events []Event, index int) Event {
 	if index >= 0 && index < len(events) {
 		return events[index]
 	}
-		return Event{}
-	}
+	return Event{}
+}
 
 // ScheduleEventUpdaters will create a goroutine for each event,
 //   and request an update at the event time
