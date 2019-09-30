@@ -217,10 +217,9 @@ func remapScheduleToEventsPerRoom(roomsMap *map[int]Room, eventsPerRoom *map[int
 func getEvent(events []Event, index int) Event {
 	if index >= 0 && index < len(events) {
 		return events[index]
-	} else {
+	}
 		return Event{}
 	}
-}
 
 // ScheduleEventUpdaters will create a goroutine for each event,
 //   and request an update at the event time
