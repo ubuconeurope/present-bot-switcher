@@ -406,10 +406,6 @@ func main() {
 	log.Println("############ Printing Schedule Info ############")
 	PrintScheduleInfo(schedule)
 
-	if true {
-		return
-	}
-
 	log.Println("############ Scheduling Event Updaters ############")
 	ScheduleEventUpdaters(schedule)
 
