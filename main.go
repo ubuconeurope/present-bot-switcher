@@ -320,12 +320,47 @@ func fixScheduleRoomsID(schedule *Schedule) {
 	}
 }
 
+func appendExtraEventsToMainSchedule(mainSchedule *Schedule, extraSchedule Schedule) {
+
+	for mDay := range mainSchedule.Days {
+		fmt.Println("==================================== mday: ", mainSchedule.Days[mDay].Date)
+		for eDay := range extraSchedule.Days {
+			fmt.Println("==================================== eday: ", extraSchedule.Days[eDay].Date)
+
+			if mainSchedule.Days[mDay].Date == extraSchedule.Days[eDay].Date {
+				for mRoom := range mainSchedule.Days[mDay].Rooms {
+					fmt.Println("==================================== mRoom: ", mainSchedule.Days[mDay].Rooms[mRoom].Name)
+					for eRoom := range extraSchedule.Days[eDay].Rooms {
+						fmt.Println("==================================== eRoom: ", extraSchedule.Days[eDay].Rooms[eRoom].Name)
+
+						if mainSchedule.Days[mDay].Rooms[mRoom].Name == extraSchedule.Days[eDay].Rooms[eRoom].Name {
+							fmt.Println("==================================== YEAHH: ", mainSchedule.Days[mDay].Rooms[mRoom].Name)
+
+							for eEvent := range extraSchedule.Days[eDay].Rooms[eRoom].Events {
+								fmt.Println("==================================== event: ", extraSchedule.Days[eDay].Rooms[eRoom].Events[eEvent].Title, extraSchedule.Days[eDay].Rooms[eRoom].Events[eEvent].Date)
+								// Hammer: I'll just assum extra events happen after all other events that day.
+								mainSchedule.Days[mDay].Rooms[mRoom].Events = append(mainSchedule.Days[mDay].Rooms[mRoom].Events, extraSchedule.Days[eDay].Rooms[eRoom].Events[eEvent])
+							}
+						}
+
+					}
+				}
+			}
+
+		}
+	}
+
+}
+
 func main() {
 	log.SetFlags(log.LstdFlags | log.Lshortfile)
 
 	var body []byte
+
+	multipleSchedules := strings.Split(scheduleEventURL, ",")
+
 	// Get schedule from the official URL, or failback to local file
-	resp, err := http.Get(scheduleEventURL)
+	resp, err := http.Get(multipleSchedules[0])
 	if err != nil {
 		log.Println("WARNING: Could not read remote URL. Fallbacking to local file")
 		body, err = ioutil.ReadFile(altLocalScheduleFile)
@@ -345,11 +380,35 @@ func main() {
 		log.Printf("error: %v", err)
 		return
 	}
+
+	// Parse extra URL if there are more (extra events)
+	for i := 1; i < len(multipleSchedules); i++ {
+		// Get schedule from the official URL, or failback to local file
+		fmt.Println("==================================== getting: ", multipleSchedules[i])
+		if resp, err = http.Get(multipleSchedules[i]); err == nil {
+			body, err = ioutil.ReadAll(resp.Body)
+			resp.Body.Close()
+
+			extraSchedule := Schedule{}
+			err = xml.Unmarshal([]byte(body), &extraSchedule)
+			if err != nil {
+				log.Printf("error: %v", err)
+				return
+			}
+
+			appendExtraEventsToMainSchedule(&schedule, extraSchedule)
+		}
+	}
+
 	fixScheduleRoomsID(&schedule)
 
 	// Print parsed XML info
 	log.Println("############ Printing Schedule Info ############")
 	PrintScheduleInfo(schedule)
+
+	if true {
+		return
+	}
 
 	log.Println("############ Scheduling Event Updaters ############")
 	ScheduleEventUpdaters(schedule)
