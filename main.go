@@ -363,6 +363,7 @@ func main() {
 	resp, err := http.Get(multipleSchedules[0])
 	if err != nil {
 		log.Println("WARNING: Could not read remote URL. Fallbacking to local file")
+		log.Println("       : err: "+err.Error())
 		body, err = ioutil.ReadFile(altLocalScheduleFile)
 		if err != nil {
 			log.Println("Error reading file. Does it exist?")
