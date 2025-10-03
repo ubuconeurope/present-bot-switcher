@@ -1,0 +1,40 @@
+project_name: present-bot-switch
+
+builds:
+- main: .
+  binary: present-bot-switch
+  goos:
+  - "linux"
+  goarch:
+  - "amd64"
+  - "386"
+  - "arm64"
+  env:
+  - CGO_ENABLED=0
+  - META_PROJECT_NAME={{.ProjectName}}
+  - META_VERSION={{.Version}}
+  - META_TAG={{.Tag}}
+  - META_PREVIOUS_TAG={{.PreviousTag}}
+  - META_COMMIT={{.Commit}}
+  - META_DATE={{.Date}}
+  mod_timestamp: '{{ .CommitTimestamp }}'
+  flags:
+  - -trimpath
+  ldflags:
+  - -s -w -X main.version={{.Version}} -X main.commit={{.ShortCommit}} -X main.dateStr={{ .CommitDate }}
+
+# Archive customization
+archives:
+- name_template: >-
+    {{ .ProjectName }}_{{- .Version }}_{{ .Os }}_{{- .Arch }}
+  format: tar.gz
+  rlcp: true
+  files:
+  - src: LICENSE
+  - src: README.md
+
+
+release:
+  # If set to auto, will mark the release as not ready for production
+  # in case there is an indicator for this in the tag e.g. v1.0.0-rc1
+  prerelease: auto

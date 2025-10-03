@@ -1,14 +1,14 @@
 # Presentation Bot Switcher (updater)
 
-This Bot reads a xml Schedule file (like https://manage.ubucon.org/eu2019/schedule/export/schedule.xml) 
-and calls the `EXTERNAL_UPDATE_URL` in order to update the Room Information for the next event. 
+This Bot reads a xml Schedule file (like https://manage.ubucon.org/eu2019/schedule/export/schedule.xml)
+and calls the `EXTERNAL_UPDATE_URL` in order to update the Room Information for the next event.
 
 If there is no internet connection, it will fallback to reading the `schedule.xml` local file. (you may force this with Env variables.
 
 This Bot is intended to integrate with [UbuconEU Present Switch](https://github.com/ubuconeurope/present-switch).
 
 
-## How to run 
+## How to run
 
 If running with defaults:
 `go run main.go`
@@ -31,5 +31,5 @@ TEST_MODE="false"
 ## Test mode
 
 In order to test everything, you may enable the `TEST_MODE=true`.
-This will update the events every second (instead of waiting for the event's time. 
+This will update the events every second (instead of waiting for the event's time.
 With this, you can see clients updating their room information.
